@@ -1,9 +1,12 @@
-from enum import Enum
+"""Environment representation for the cigale and fourmi agents.
+"""
+
+import enum
 import random
 import threading
 import time
 
-class Season(Enum):
+class Season(enum.Enum):
     SPRING = 1
     SUMMER = 2
     FALL = 3
@@ -82,12 +85,12 @@ class ForestGenerator(object):
                     grid += " -1"
                     continue
                 grid += " " + str(self._env[y][x])
-            grid += "\n"   
+            grid += "\n"
         return grid
 
     def _populate(self):
         fruits_to_generate = random.randint(
-            1, 
+            1,
             int(self._height * self._width * ForestGenerator.growth[self._season][1])
         )
 
@@ -107,11 +110,11 @@ class ForestGenerator(object):
         day = 0
         year = 0
         while True:
-            print("%d / %d Season: %s, Filled: %f" % 
+            print("%d / %d Season: %s, Filled: %f" %
                   (day, year, self._season, self._fill_percentage()))
-            t = threading.Thread(target=self._simulate)
-            t.start()
-            t.join()
+            thread = threading.Thread(target=self._simulate)
+            thread.start()
+            thread.join()
             day += 1
             if day == 80:
                 year += 1
@@ -153,7 +156,7 @@ class ForestGenerator(object):
                 if self._env[y + dy][x + dx] is None:
                     available.append((y + dy, x + dx))
         random.shuffle(available)
-        
+
         could_seed = False
         for i in range(min(len(available), seeds)):
             if self._fill_percentage() >= self.growth[self._season][1]:
@@ -164,7 +167,7 @@ class ForestGenerator(object):
 
         if could_seed:
             self._env[y][x].seeded()
-            
+
 
     def _fill_percentage(self):
         used = 0
