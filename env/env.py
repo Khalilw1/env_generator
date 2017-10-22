@@ -6,7 +6,6 @@ import random
 
 class Season(Enum):
     """Season is a representation of the human year's seasonal episodes."""
-
     SPRING = 0
     SUMMER = 1
     FALL = 2
@@ -23,6 +22,8 @@ class Cell(object):
     def __init__(self):
         self._newly = 0
         self._stored = 0
+        #TODO(@khalil): Discuss this matter and see how energy food provides should be calculated.
+        self._energy = random.randint(1, 10)
 
     def get_newly(self):
         """Get newly."""
@@ -47,6 +48,10 @@ class Cell(object):
     def decrease_newly(self, quantitiy):
         """Decrease the newly by the giving quantity."""
         self._newly = self._newly - quantitiy
+
+    def get_food_energy(self):
+        """Get energy."""
+        return self._energy
 
 class Environment(object):
     """Environment generated and interface for interaction."""
@@ -93,7 +98,9 @@ class Environment(object):
         """One unit of time simulation."""
         self._t = self._t + 1
         if self._t == self._cycle:
+            # End of a season, start of the next one. Year is also cyclic that is WINTER -> SPRING.
             self._t = 0
+            self._season = self._season.next()
 
     @property
     def height(self):
@@ -111,8 +118,14 @@ class Environment(object):
 
 class Agent(object):
     """Parent class for every type of agent present in our environment."""
-    def __init__(self, initial_energy, env):
+    def __init__(self, max_energy, initial_energy, env, be_cost, eat_cost, move_cost):
+        self._max_energy = max_energy
         self._energy = initial_energy
+
+        self._be_cost = be_cost
+        self._eat_cost = eat_cost
+        self._move_cost = move_cost
+
         self._env = env
         self._i = random.randint(0, env.height - 1)
         self._j = random.randint(0, env.width - 1)
@@ -121,8 +134,43 @@ class Agent(object):
         """Returns what the agent can see and depends on what type of agent."""
         raise NotImplementedError
 
+    def move(self, deltai, deltaj):
+        """Agent moves in one of the eight 2-d directions with sanity checking of new postition."""
+        if abs(deltai) > 1 or abs(deltaj) > 1:
+            return
+        if self._i + deltai >= self._env.height or self._j + deltaj >= self._env.width:
+            return
+
+        self._i = self._i + deltai
+        self._j = self._j + deltaj
+
+        self._energy = self._energy - self._move_cost
+
+        self._env.simulate()
+
+    def eat(self):
+        """Consume one unit of stored food to increase energy level."""
+        cell = self._env.get_cell(self._i, self._j)
+        if cell.get_stored() == 0:
+            return
+        cell.consume()
+        self._energy = self._energy + cell.get_food_energy()
+
+        self._energy = self._energy - self._eat_cost
+
+        self._env.simulate()
+
+    def skip(self):
+        """Skip the day without doing any actions."""
+        self._energy = self._energy - self._be_cost
+        self._env.simulate()
+
 class GrassHoper(Agent):
     """GrassHoper agent type who has ability to sing."""
+    def __init__(self, max_energy, initial_energy, env, be_cost, eat_cost, move_cost, sing_cost):
+        super().__init__(max_energy, initial_energy, env, be_cost, eat_cost, move_cost)
+        self._sing_cost = sing_cost
+
     def show(self):
         return {'stored': self.show_stored()}
 
@@ -131,7 +179,11 @@ class GrassHoper(Agent):
         return self._env.get_cell(self._i, self._j).get_stored()
 
 class Ant(Agent):
-    """The first type of agents the ant and its access API."""
+    """The ant agent and its access API."""
+    def __init__(self, max_energy, initial_energy, env, be_cost, eat_cost, move_cost, forage_cost):
+        super().__init__(max_energy, initial_energy, env, be_cost, eat_cost, move_cost)
+        self._forage_cost = forage_cost
+
     def show(self):
         return {'stored': self.show_stored(), 'newly': self.show_newly()}
 
@@ -149,28 +201,8 @@ class Ant(Agent):
         if cell.get_newly() > 0:
             cell.store(1)
             cell.decrease_newly(1)
-        self._env.simulate()
 
-
-    def move(self, deltai, deltaj):
-        """Agent moves in one of the eight 2-d directions with sanity checking of new postition."""
-        if abs(deltai) > 1 or abs(deltaj) > 1:
-            return
-        if self._i + deltai >= self._env.height or self._j + deltaj >= self._env.width:
-            return
-
-        self._i = self._i + deltai
-        self._j = self._j + deltaj
-
-        self._env.simulate()
-
-    def eat(self):
-        """Consume one unit of stored food to increase energy level."""
-        cell = self._env.get_cell(self._i, self._j)
-        if cell.get_stored() == 0:
-            return
-        cell.consume()
-        #TODO(@khalil): add energy increase.
+        self._energy = self._energy - self._forage_cost
 
         self._env.simulate()
 
@@ -179,27 +211,56 @@ class Ant(Agent):
 def parse():
     """Parse command line args to get constants for the environment and agents."""
     parser = argparse.ArgumentParser(conflict_handler='resolve')
-    parser.add_argument('-spring', '--spring_threshold', type=int, default=10,
+
+    # Environment specific control flags.
+    parser.add_argument('-spring', '--spring_threshold', type=int, default=6,
                         help='The maximum ammount of newly generated food for spring season')
-    parser.add_argument('-summer', '--summer_threshold', type=int, default=10,
+    parser.add_argument('-summer', '--summer_threshold', type=int, default=7,
                         help='The maximum ammount of newly generated food for summer season')
-    parser.add_argument('-fall', '--fall_threshold', type=int, default=12,
+    parser.add_argument('-fall', '--fall_threshold', type=int, default=5,
                         help='The maximum ammount of newly generated food for fall season')
-    parser.add_argument('-winter', '--winter_threshold', type=int, default=10,
+    parser.add_argument('-winter', '--winter_threshold', type=int, default=2,
                         help='The maximum ammount of newly generated food for winter season')
     parser.add_argument('-w', '--width', type=int, default=5, help='width of the 2-d environment')
     parser.add_argument('-h', '--height', type=int, default=5, help='height of the 2-d environment')
     parser.add_argument('-c', '--cycle', type=int, default=10,
                         help='seasonnal cycle length of the environment')
+
+    # Agent specific control flags.
+    parser.add_argument('-e', '--energy', type=int, default=20,
+                        help='initial energy level of the agents')
+    parser.add_argument('-m', '--max_energy', type=int, default=20,
+                        help='maximum energy an agent tries to reach continuously')
+
+    parser.add_argument('-be', '--be', type=int, default=1,
+                        help='cost needed to stay alive without doing any action')
+    parser.add_argument('-eat', '--eat', type=int, default=2, help='cost needed to eat')
+    parser.add_argument('-sing', '--sing', type=int, default=3, help='cost needed to sing')
+    parser.add_argument('-move', '--move', type=int, default=4, help='cost needed to move')
+    parser.add_argument('-forage', '--forage', type=int, default=5, help='cost needed to forage')
+
     args = parser.parse_args()
-    print(args.spring_threshold)
 
-    agent = Ant(200, Environment(args.height, args.width, args.cycle,
-                                 [args.spring_threshold, args.summer_threshold,
-                                  args.fall_threshold, args.winter_threshold]))
-    print(agent)
+    # Instatiate our to special {ant, grasshoper} agents.
+    ant = Ant(args.max_energy, args.energy,
+              Environment(args.height, args.width, args.cycle,
+                          [args.spring_threshold, args.summer_threshold,
+                           args.fall_threshold, args.winter_threshold]),
+              args.be, args.eat, args.move,
+              args.forage)
 
-    print(agent.show())
+    grasshoper = GrassHoper(args.max_energy, args.energy,
+                            Environment(args.height, args.width, args.cycle,
+                                        [args.spring_threshold, args.summer_threshold,
+                                         args.fall_threshold, args.winter_threshold]),
+                            args.be, args.eat, args.move,
+                            args.forage)
+    print(ant)
+
+    print(ant.show())
+    ant.eat()
+    print(grasshoper.show())
+    grasshoper.eat()
 
 if __name__ == '__main__':
     parse()
