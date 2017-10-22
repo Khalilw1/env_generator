@@ -102,6 +102,8 @@ class Environment(object):
             self._t = 0
             self._season = self._season.next()
 
+        #TODO(@khalil): Add environment replenishement.
+
     @property
     def height(self):
         """Get height."""
@@ -177,6 +179,11 @@ class GrassHoper(Agent):
     def show_stored(self):
         """Show the number of stored food on the current cell."""
         return self._env.get_cell(self._i, self._j).get_stored()
+
+    def sing(self):
+        """Sing action basically a useless time skipping version for grasshoper."""
+        self._energy = self._energy - self._sing_cost
+        self._env.simulate()
 
 class Ant(Agent):
     """The ant agent and its access API."""
