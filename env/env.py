@@ -60,6 +60,7 @@ class Environment(object):
         self._width = width
         self._cycle = cycle
         self._env = [[Cell() for j in range(self._height)] for i in range(self._height)]
+        self._seeded = [[False for j in range(self._height)] for i in range(self._height)]
         self._t = 0
         self._season = Season.SPRING
         self._food_per_season = food_per_season
@@ -102,7 +103,30 @@ class Environment(object):
             self._t = 0
             self._season = self._season.next()
 
-        #TODO(@khalil): Add environment replenishement.
+        # When the ammount of newly produced food in a cell is over and the cell can seed we 
+        # randomly choose another spot where some random ammount of newly produced food should 
+        # be stored.
+        for i in range(self._height):
+            for j in range(self._width):
+                if self._env[i][j].get_newly() == 0 and not self._seeded[i][j]:
+                    # if the cell become empty just now seed in once in a randomn cell on the grid.
+                    self._seeded[i][j] = True
+                    cap = self._height + self._width
+                    while cap > 0:
+                        seedi = random.randint(0, self._height - 1)
+                        seedj = random.randint(0, self._width - 1)
+
+                        production_cap = self._food_per_season[self._season.value]
+
+                        production_cap -= self._env[seedi][seedj].get_newly()
+
+                        if production_cap > 0:
+                            seed_amount = random.randint(1, production_cap)
+                            self._env[seedi][seedj].produce(seed_amount)
+                            self._seeded[seedi][seedj] = False
+                            break
+
+                        cap = cap - 1
 
     @property
     def height(self):
