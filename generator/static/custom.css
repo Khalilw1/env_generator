@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto+Mono');
+@import url('https://fonts.googleapis.com/css?family=Lato');
+
+body {
+    margin: 0;
+    width: 100%;
+    letter-spacing: 2px;
+    font-family: Lato, 'Roboto Mono', monospace;
+}
+
+/* Special case handling the only the titles to override default foundation font */
+h4 {
+    font-family: Lato, 'Roboto Mono', monospace;
+}
+
+.container {
+    display: inline-block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 360px;
+    height: fit-content;
+    padding: 10px 10px;
+    margin: auto;
+    margin-top: 180px; /* experimental fix */
+}
+
+.log {
+    border: 1px solid #cacaca;
+    padding: 1rem;
+    border-radius: 0;
+}

@@ -1,0 +1,2 @@
+graft generator/templates
+graft generator/static
