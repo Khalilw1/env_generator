@@ -103,8 +103,8 @@ class Environment(object):
             self._t = 0
             self._season = self._season.next()
 
-        # When the ammount of newly produced food in a cell is over and the cell can seed we 
-        # randomly choose another spot where some random ammount of newly produced food should 
+        # When the ammount of newly produced food in a cell is over and the cell can seed we
+        # randomly choose another spot where some random ammount of newly produced food should
         # be stored.
         for i in range(self._height):
             for j in range(self._width):
@@ -156,6 +156,16 @@ class Agent(object):
         self._i = random.randint(0, env.height - 1)
         self._j = random.randint(0, env.width - 1)
 
+    @property
+    def i(self):
+        """Get i."""
+        return self._i
+
+    @property
+    def j(self):
+        """Get j."""
+        return self._j
+
     def show(self):
         """Returns what the agent can see and depends on what type of agent."""
         raise NotImplementedError
@@ -167,6 +177,9 @@ class Agent(object):
         if self._i + deltai >= self._env.height or self._j + deltaj >= self._env.width:
             return
 
+        if self._energy < self._move_cost:
+            return
+
         self._i = self._i + deltai
         self._j = self._j + deltaj
 
@@ -176,6 +189,9 @@ class Agent(object):
 
     def eat(self):
         """Consume one unit of stored food to increase energy level."""
+        if self._energy < self._eat_cost:
+            return
+
         cell = self._env.get_cell(self._i, self._j)
         if cell.get_stored() == 0:
             return
@@ -188,6 +204,9 @@ class Agent(object):
 
     def skip(self):
         """Skip the day without doing any actions."""
+        if self._energy < self._be_cost:
+            return
+
         self._energy = self._energy - self._be_cost
         self._env.simulate()
 
@@ -196,6 +215,8 @@ class GrassHoper(Agent):
     def __init__(self, max_energy, initial_energy, env, be_cost, eat_cost, move_cost, sing_cost):
         super().__init__(max_energy, initial_energy, env, be_cost, eat_cost, move_cost)
         self._sing_cost = sing_cost
+        # Friends is a given list of ants that we made friendship with and can help us by singing.
+        self._friends = []
 
     def show(self):
         return {'stored': self.show_stored()}
@@ -204,8 +225,19 @@ class GrassHoper(Agent):
         """Show the number of stored food on the current cell."""
         return self._env.get_cell(self._i, self._j).get_stored()
 
+
+    def call(self, i, j):
+        """Friendship is so powerful calling friends doesn't use energy. It only takes gratitude."""
+        for ant in self._friends:
+            if ant.i == i and ant.j == j:
+                ant.forage()
+
+
     def sing(self):
         """Sing action basically a useless time skipping version for grasshoper."""
+        if self._energy < self._sing_cost:
+            return
+
         self._energy = self._energy - self._sing_cost
         self._env.simulate()
 
@@ -228,16 +260,16 @@ class Ant(Agent):
 
     def forage(self):
         """Forage takes a cell and does something."""
+        if self._energy < self._forage_cost:
+            return
+
         cell = self._env.get_cell(self._i, self._j)
         if cell.get_newly() > 0:
             cell.store(1)
             cell.decrease_newly(1)
 
         self._energy = self._energy - self._forage_cost
-
         self._env.simulate()
-
-
 
 def parse():
     """Parse command line args to get constants for the environment and agents."""
@@ -270,28 +302,16 @@ def parse():
     parser.add_argument('-move', '--move', type=int, default=4, help='cost needed to move')
     parser.add_argument('-forage', '--forage', type=int, default=5, help='cost needed to forage')
 
+    parser.add_argument('-p', '--population', type=int, default=2,
+                        help='number of living creatures inside our universe')
+
     args = parser.parse_args()
+    return args
 
-    # Instatiate our to special {ant, grasshoper} agents.
-    ant = Ant(args.max_energy, args.energy,
-              Environment(args.height, args.width, args.cycle,
-                          [args.spring_threshold, args.summer_threshold,
-                           args.fall_threshold, args.winter_threshold]),
-              args.be, args.eat, args.move,
-              args.forage)
-
-    grasshoper = GrassHoper(args.max_energy, args.energy,
-                            Environment(args.height, args.width, args.cycle,
-                                        [args.spring_threshold, args.summer_threshold,
-                                         args.fall_threshold, args.winter_threshold]),
-                            args.be, args.eat, args.move,
-                            args.forage)
-    print(ant)
-
-    print(ant.show())
-    ant.eat()
-    print(grasshoper.show())
-    grasshoper.eat()
+def init():
+    """init creates and environment for the game to be played."""
+    env = Environment(5, 5, 20, [10, 20, 10, 5])
+    return env
 
 if __name__ == '__main__':
     parse()
