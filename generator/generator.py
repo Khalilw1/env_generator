@@ -129,6 +129,8 @@ def dashboard(username):
         db.session.add(user)
         db.session.commit()
 
+    environment = None
+    agent = user.agent
     if user.agent is None:
         print('No agent assigned to ' + username)
         environments = Environment.query.all()
@@ -136,7 +138,6 @@ def dashboard(username):
         options = len(environments)
 
         target = randint(0, options)
-        environment = None
         if target == 0:
             # create a new environment and host this agent in it.
             environment = Environment()
@@ -148,12 +149,11 @@ def dashboard(username):
         print(environment.id)
 
         agents = len(Agent.query.filter_by(envid=environment.id).all())
-        hoppers = len(Agent.query.filter_by(envid=environment.id, type='grasshoper').all())
+        hoppers = len(Agent.query.filter_by(envid=environment.id, type='grasshopper').all())
         ants = len(Agent.query.filter_by(envid=environment.id, type='ant').all())
 
         assert agents == hoppers + ants
 
-        agent = None
         if hoppers < ants:
             # create a grasshoper for the current player otherwise create an ant.
             agent = Grasshopper(sing_cost=2, max_energy=100, energy=90, be_cost=1, eat_cost=1,
@@ -170,5 +170,7 @@ def dashboard(username):
 
         db.session.add(agent)
         db.session.commit()
+    else:
+        environment = Environment.query.filter_by(id=agent.envid).first()
 
-    return render_template('dashboard.html', username=username)
+    return render_template('dashboard.html', user=user, agent=agent, environment=environment)

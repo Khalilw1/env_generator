@@ -1,4 +1,44 @@
 {% extends "base.html" %}
 {% block content %}
-<h4 align="center">Hello {{ username }}</h4>
+<h4 align="center">Welcome {{ user.username }}</h4>
+<p align="center">
+    Your are in environment {{ environment.id }}
+</p> 
+<p align="center">
+    Your position is : ({{agent.i}}, {{agent.j}})
+</p>
+
+<div class="grid">
+</div>
+{% endblock %}
+
+{% block custom %}
+<script>
+    $(function() {
+        function createGrid(height, width) {
+            var ratioW = Math.floor($('.grid').width() / width),
+                ratioH = Math.floor($('.grid').height() / height);
+    
+            var parent = $('div.grid').attr('width', ratioW  * width).attr('height', ratioH  * height);
+    
+            for (var i = 0; i < width * height; i++) {
+                $('<div />', {
+                    width: ratioW,
+                    height: ratioH
+                }).appendTo(parent);
+
+                if (Math.floor(i / height) ==  parseInt('{{ agent.i }}')
+                    && i % width == parseInt('{{ agent.j }}')) {
+                        $('<img />', {
+                            src: '{{ agent.type }}' == 'grasshopper' ? '{{ url_for("static", filename="grasshopper2.png") }}' : '{{ url_for("static", filename="ant.png") }}'
+                        }).addClass('middle').appendTo(parent.children().last());
+                    }
+            }
+        }
+
+        // Create the environment for the agent to reside on.
+        createGrid(parseInt('{{ environment.height }}'), parseInt('{{ environment.width }}'));
+    })
+    
+</script>
 {% endblock %}
