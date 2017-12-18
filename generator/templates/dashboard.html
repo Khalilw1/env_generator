@@ -1,15 +1,25 @@
 {% extends "base.html" %}
+{% block header %}
+<div class="cell">
+    <h4 align="center">Welcome {{ user.username }}</h4>
+    <p align="center">
+        Your are in environment {{ environment.id }}
+    </p> 
+    <p align="center">
+        Your position is : ({{agent.i}}, {{agent.j}})
+    </p>
+</div>
+{% endblock %}
 {% block content %}
-<h4 align="center">Welcome {{ user.username }}</h4>
-<p align="center">
-    Your are in environment {{ environment.id }}
-</p> 
-<p align="center">
-    Your position is : ({{agent.i}}, {{agent.j}})
-</p>
-
 <div class="grid">
 </div>
+{% endblock %}
+
+{% block hud %}
+<p class="energy">energy {{ agent.energy }}</p>
+{% for key, value in percepts.items() %}
+    <p class="{{key}}">#{{ key|e }} {{ value|e }}</p>
+{% endfor %}
 {% endblock %}
 
 {% block custom %}
@@ -27,7 +37,7 @@
                     height: ratioH
                 }).appendTo(parent);
 
-                if (Math.floor(i / height) ==  parseInt('{{ agent.i }}')
+                if (Math.floor(i / width) ==  parseInt('{{ agent.i }}')
                     && i % width == parseInt('{{ agent.j }}')) {
                         $('<img />', {
                             src: '{{ agent.type }}' == 'grasshopper' ? '{{ url_for("static", filename="grasshopper2.png") }}' : '{{ url_for("static", filename="ant.png") }}'
@@ -38,6 +48,46 @@
 
         // Create the environment for the agent to reside on.
         createGrid(parseInt('{{ environment.height }}'), parseInt('{{ environment.width }}'));
+
+        function move(deltai, deltaj) {
+            var username = '{{ user.username }}';
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", '/'+ username + '/move', true);
+
+            xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
+                    document.write(xhr.responseText);
+                    document.close();
+                }
+            }
+
+            xhr.send('deltai=' + deltai + '&deltaj=' + deltaj);
+        }
+
+        $(window).keydown(function(e) {
+            // console.log(e);
+            var deltai = 0, deltaj = 0;
+            switch(e.which) {
+                case 37:
+                deltai = 0, deltaj = -1;
+                break;
+                case 38:
+                deltai = -1, deltaj = 0;
+                break;
+                case 39:
+                deltai = 0, deltaj = 1;
+                break;
+                case 40:
+                deltai = 1, deltaj = 0;
+                break;
+            }
+
+            if (deltai !== 0 || deltaj !== 0) {
+                // directionnal move has been pressed.
+                move(deltai, deltaj);
+            }
+        })
     })
     
 </script>

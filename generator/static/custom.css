@@ -14,17 +14,9 @@ h4 {
 }
 
 .container {
-    display: inline-block;
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 980px;
     height: fit-content;
     padding: 10px 10px;
     margin: auto;
-    margin-top: 180px; /* experimental fix */
 }
 
 .login {
@@ -69,4 +61,16 @@ h4 {
     top: 50%;
     transform: translateY(-50%); 
     text-align: center
+}
+
+.stored {
+    color: rgb(101, 130, 153)
+}
+
+.newly {
+    color: rgb(206, 38, 12)
+}
+
+.energy {
+    color: crimson
 }

@@ -1,6 +1,6 @@
 """Creation of the app and matching the blueprints."""
 from random import randint
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
@@ -74,7 +74,7 @@ class Environment(db.Model):
 
         for i in range(0, height):
             for j in range(0, width):
-                self.cells.append(Cell(i * height + j, 0, 0, randint(5, 10), 0, self.id))
+                self.cells.append(Cell(i * width + j, 0, 0, randint(5, 10), 0, self.id))
 
 
 class Agent(db.Model):
@@ -95,6 +95,30 @@ class Agent(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     envid = db.Column(db.Integer, db.ForeignKey('environment.id'), nullable=False)
 
+    def show(self, cell):
+        """Returns what the agent can see and depends on what type of agent."""
+        raise NotImplementedError
+
+    def move(self, deltai, deltaj):
+        """Agent moves in one of the eight 2-d directions with sanity checking of new postition."""
+        if abs(deltai) > 1 or abs(deltaj) > 1:
+            return
+        environment = Environment.query.filter_by(id=self.envid).first()
+
+        if self.i + deltai >= environment.height or self.j + deltaj >= environment.width:
+            return
+
+        if self.energy < self.move_cost:
+            return
+
+        self.i = self.i + deltai
+        self.j = self.j + deltaj
+
+        print(self.i, self.j)
+        self.energy = self.energy - self.move_cost
+
+        db.session.commit()
+
     __mapper_args__ = {
         'polymorphic_on': type,
         'polymorphic_identity': 'agent'
@@ -103,6 +127,13 @@ class Agent(db.Model):
 class Ant(Agent):
     forage_cost = db.Column(db.Integer)
 
+    def show(self, cell):
+        print('Ant instance for show was called.')
+        return {
+            'newly': cell.newly,
+            'stored': cell.stored
+        }
+
     __mapper_args__ = {
         'polymorphic_identity':'ant'
     }
@@ -110,11 +141,15 @@ class Ant(Agent):
 class Grasshopper(Agent):
     sing_cost = db.Column(db.Integer)
 
+    def show(self, cell):
+        print('Grasshoper instance for show was called.')
+        return {
+            'stored': cell.stored
+        }
+
     __mapper_args__ = {
         'polymorphic_identity':'grasshopper'
     }
-
-
 
 @app.route('/')
 def home():
@@ -173,4 +208,25 @@ def dashboard(username):
     else:
         environment = Environment.query.filter_by(id=agent.envid).first()
 
-    return render_template('dashboard.html', user=user, agent=agent, environment=environment)
+    cell = environment.cells[agent.i * environment.width + agent.j]
+    percepts = agent.show(cell)
+    return render_template('dashboard.html',
+                           user=user,
+                           agent=agent,
+                           environment=environment,
+                           percepts=percepts
+                          )
+
+@app.route('/<username>/move', methods=['POST'])
+def move(username):
+    print(username)
+    if request.method == 'POST':
+        print('move has been sent and should be processed')
+        deltai = int(request.form['deltai'])
+        deltaj = int(request.form['deltaj'])
+
+        user = User.query.filter_by(username=username).first()
+        agent = user.agent
+        agent.move(deltai, deltaj)
+        return dashboard(username)
+    return "Tired. :|"
