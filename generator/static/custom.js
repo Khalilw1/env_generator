@@ -6,6 +6,6 @@ $(function() {
 
         var username = $('.log input[type="text"]')[0].value; // get the entered username check validity
         console.log(username);
-        window.location.replace(username);
+        window.location.replace(username + '/create');
     });
 })

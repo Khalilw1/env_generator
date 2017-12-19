@@ -6,5 +6,8 @@
     <input type="text" placeholder="username">
     <input type="submit" class="button expanded" value="enter"></input>
 </form>
+{% for user in users %}
+    <a class="hollow button expanded" href="{{user.username}}/create">{{ user.username }}</a>
+{% endfor %}
 </div>
 {% endblock %}

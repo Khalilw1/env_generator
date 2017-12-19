@@ -2,6 +2,7 @@
 from random import randint
 from flask import Flask, render_template, request
 from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
 app.config.update(dict(
@@ -11,8 +12,8 @@ app.config.update(dict(
     SEND_FILE_MAX_AGE_DEFAULT=0
 ))
 app.config.from_envvar('GENERATOR_SETTINGS', silent=True)
-
 db = SQLAlchemy(app)
+socketio = SocketIO(app)
 
 class User(db.Model):
     """User model that encapsulate our user instance and to which agent it is linked."""
@@ -44,12 +45,26 @@ class Cell(db.Model):
         self.seeded = seeded
         self.envid = envid
 
+
 class Season(db.Model):
     __tablename__ = 'season'
     name = db.Column(db.Enum('spring', 'summer', 'fall', 'winter'), nullable=False,
                      primary_key=True)
     production = db.Column(db.Integer, nullable=False)
-    envs = db.relationship('Environment', backref='season', lazy=True)
+
+    @staticmethod
+    def populate():
+        spring = Season(name='spring', production=10)
+        summer = Season(name='summer', production=17)
+        fall = Season(name='fall', production=12)
+        winter = Season(name='winter', production=7)
+
+        if Season.query.first() is None:
+            db.session.add(spring)
+            db.session.add(fall)
+            db.session.add(winter)
+            db.session.add(summer)
+            db.session.commit()
 
 class Environment(db.Model):
     __tablename__ = 'environment'
@@ -60,22 +75,71 @@ class Environment(db.Model):
     t = db.Column(db.Integer, nullable=False)
     season_desc = db.Column(db.Enum('spring', 'summer', 'fall', 'winter'),
                             db.ForeignKey('season.name'))
+    season = db.relationship('Season', backref="envs", lazy=True)
     cells = db.relationship('Cell', backref='environment', lazy=True)
     agents = db.relationship('Agent', backref='environment', lazy=True)
+    nrequest_daily = db.Column(db.Integer, nullable=True)
 
-    def __init__(self, height=5, width=5, cycle=20, t=0, **kwargs):
+    def __init__(self, height=randint(5, 10), width=0, cycle=20, t=0, **kwargs):
         super(Environment, self).__init__(**kwargs)
         self.height = height
-        self.width = width
+        print(width)
+        if width != 0:
+            self.width = width
+        else:
+            self.width = height
         self.cycle = cycle
         self.t = t
-
+        self.season = Season.query.filter_by(name='spring').first()
+        if self.season is None:
+            Season.populate()
+        self.season = Season.query.filter_by(name='spring').first()
+        self.season_desc = self.season.name
+        self.nrequest_daily = 0
         self.cells = []
-
-        for i in range(0, height):
-            for j in range(0, width):
+        for i in range(0, self.height):
+            for j in range(0, self.width):
                 self.cells.append(Cell(i * width + j, 0, 0, randint(5, 10), 0, self.id))
 
+        self.generate_initial()
+
+    def generate_initial(self):
+        production_cap = randint(1, self.height * self.width)
+        for i in range(self.height):
+            if production_cap == 0:
+                break
+            for j in range(self.width):
+                if production_cap == 0:
+                    break
+                cell = self.cells[i * self.width + j]
+
+                if cell.newly >= self.season.production:
+                    continue
+
+                should_fill = randint(0, 1)
+                if not should_fill:
+                    continue
+                production_cap = production_cap - 1
+                quantity = randint(1, self.season.production - cell.newly)
+
+                # TODO(khalil): add methods for this type of operations :- cell.produce(quantity).
+                cell.newly += quantity
+
+    def simulate(self):
+        self.t += 1
+        if self.t == self.cycle:
+            # change season to next one
+            self.t = 0
+        db.session.commit()
+
+    def broadcast(self):
+        self.nrequest_daily += 1
+        print(len(Agent.query.filter_by(envid=self.id).all()))
+
+        if self.nrequest_daily >= len(Agent.query.filter_by(envid=self.id).all()):
+            socketio.emit('refresh', {'id': self.id})
+            self.nrequest_daily = 0
+            self.simulate()
 
 class Agent(db.Model):
     __tablename__ = 'agent'
@@ -91,6 +155,8 @@ class Agent(db.Model):
     i = db.Column(db.Integer, nullable=False)
     j = db.Column(db.Integer, nullable=False)
 
+    has_played = db.Column(db.Boolean)
+
 
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     envid = db.Column(db.Integer, db.ForeignKey('environment.id'), nullable=False)
@@ -99,25 +165,54 @@ class Agent(db.Model):
         """Returns what the agent can see and depends on what type of agent."""
         raise NotImplementedError
 
+    def eat(self):
+        """Consume one unit of stored food to increase energy level."""
+        if self.has_played:
+            return False
+        if self.energy < self.eat_cost:
+            return
+
+        environment = Environment.query.filter_by(id=self.envid).first()
+        cell = environment.cells[self.i * environment.width + self.j]
+
+        if cell.stored == 0:
+            return
+        cell.stored -= 1
+        self.energy = self.energy + cell.energy
+
+        self.energy = self.energy - self.eat_cost
+
+        environment.broadcast()
+        self.has_played = True
+
+        db.session.commit()
+
     def move(self, deltai, deltaj):
         """Agent moves in one of the eight 2-d directions with sanity checking of new postition."""
+        if self.has_played:
+            return False
         if abs(deltai) > 1 or abs(deltaj) > 1:
-            return
+            return False
         environment = Environment.query.filter_by(id=self.envid).first()
 
         if self.i + deltai >= environment.height or self.j + deltaj >= environment.width:
-            return
+            return False
+        if self.i + deltai < 0 or self.j + deltaj < 0:
+            return False
 
         if self.energy < self.move_cost:
-            return
+            return False
 
         self.i = self.i + deltai
         self.j = self.j + deltaj
 
-        print(self.i, self.j)
         self.energy = self.energy - self.move_cost
 
+        environment.broadcast()
+        self.has_played = True
+
         db.session.commit()
+        return True
 
     __mapper_args__ = {
         'polymorphic_on': type,
@@ -128,11 +223,35 @@ class Ant(Agent):
     forage_cost = db.Column(db.Integer)
 
     def show(self, cell):
-        print('Ant instance for show was called.')
         return {
             'newly': cell.newly,
             'stored': cell.stored
         }
+
+    def forage(self):
+        """Forage takes a cell and adds stored by reducing a newly."""
+        if self.has_played:
+            return False
+        if self.energy < self.forage_cost:
+            return False
+
+        environment = Environment.query.filter_by(id=self.envid).first()
+        cell = environment.cells[self.i * environment.width + self.j]
+        if cell.newly > 0:
+            cell.stored += 1
+            cell.newly -= 1
+        else:
+            return False
+
+        self.energy = self.energy - self.forage_cost
+
+        environment.broadcast()
+        self.has_played = True
+
+        db.session.commit()
+
+        return True
+
 
     __mapper_args__ = {
         'polymorphic_identity':'ant'
@@ -142,7 +261,6 @@ class Grasshopper(Agent):
     sing_cost = db.Column(db.Integer)
 
     def show(self, cell):
-        print('Grasshoper instance for show was called.')
         return {
             'stored': cell.stored
         }
@@ -153,9 +271,9 @@ class Grasshopper(Agent):
 
 @app.route('/')
 def home():
-    return render_template('home.html')
+    return render_template('home.html', users=User.query.all())
 
-@app.route('/<username>')
+@app.route('/<username>/create')
 def dashboard(username):
     """Create a user and agent for username given the counts of all the ants and grasshopper."""
     user = User.query.filter_by(username=username).first()
@@ -167,7 +285,6 @@ def dashboard(username):
     environment = None
     agent = user.agent
     if user.agent is None:
-        print('No agent assigned to ' + username)
         environments = Environment.query.all()
 
         options = len(environments)
@@ -181,8 +298,6 @@ def dashboard(username):
         else:
             environment = environments[target - 1]
 
-        print(environment.id)
-
         agents = len(Agent.query.filter_by(envid=environment.id).all())
         hoppers = len(Agent.query.filter_by(envid=environment.id, type='grasshopper').all())
         ants = len(Agent.query.filter_by(envid=environment.id, type='ant').all())
@@ -193,15 +308,17 @@ def dashboard(username):
             # create a grasshoper for the current player otherwise create an ant.
             agent = Grasshopper(sing_cost=2, max_energy=100, energy=90, be_cost=1, eat_cost=1,
                                 move_cost=2, envid=environment.id, user_id=user.id,
-                                i=randint(0, environment.height), j=randint(0, environment.width))
+                                has_played=False,
+                                i=randint(0, environment.height - 1),
+                                j=randint(0, environment.width - 1))
         else:
             agent = Ant(forage_cost=2, max_energy=100, energy=90, be_cost=1, eat_cost=1,
                         move_cost=2, envid=environment.id, user_id=user.id,
-                        i=randint(0, environment.height), j=randint(0, environment.width))
+                        has_played=False,
+                        i=randint(0, environment.height - 1),
+                        j=randint(0, environment.width - 1))
 
         user.agent = agent
-
-        print(agent.type)
 
         db.session.add(agent)
         db.session.commit()
@@ -214,12 +331,12 @@ def dashboard(username):
                            user=user,
                            agent=agent,
                            environment=environment,
-                           percepts=percepts
+                           percepts=percepts,
+                           grid=True
                           )
 
 @app.route('/<username>/move', methods=['POST'])
 def move(username):
-    print(username)
     if request.method == 'POST':
         print('move has been sent and should be processed')
         deltai = int(request.form['deltai'])
@@ -228,5 +345,49 @@ def move(username):
         user = User.query.filter_by(username=username).first()
         agent = user.agent
         agent.move(deltai, deltaj)
-        return dashboard(username)
-    return "Tired. :|"
+        db.session.commit()
+    return ('', 204)
+
+@app.route('/<username>/forage', methods=['POST'])
+def forage(username):
+    if request.method == 'POST':
+        print('forage request emmited by an ant I hope.')
+
+        user = User.query.filter_by(username=username).first()
+        agent = user.agent
+        if agent.type != 'ant':
+            return 'Grasshopper cannot forage.'
+        agent.forage()
+        db.session.commit()
+    return ('', 204)
+
+@app.route('/<username>/eat', methods=['POST'])
+def eat(username):
+    if request.method == 'POST':
+        print('eat request emmited by an ant I hope.')
+
+        user = User.query.filter_by(username=username).first()
+        agent = user.agent
+        agent.eat()
+        db.session.commit()
+    return ('', 204)
+
+@app.route('/<username>/refresh', methods=['GET'])
+def refresh(username):
+    user = User.query.filter_by(username=username).first()
+    agent = user.agent
+    agent.has_played = False
+    environment = Environment.query.filter_by(id=agent.envid).first()
+    cell = environment.cells[agent.i * environment.width + agent.j]
+    percepts = agent.show(cell)
+
+    db.session.commit()
+    return render_template('environment.html',
+                           user=user,
+                           agent=agent,
+                           environment=environment,
+                           percepts=percepts)
+
+
+if __name__ == '__main__':
+    socketio.run(app)

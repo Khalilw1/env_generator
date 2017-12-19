@@ -1,0 +1,49 @@
+
+<meta id="dimensions" 
+      data-height='{{ environment.height }}' 
+      data-width='{{ environment.width }}' 
+      data-id={{ environment.id }}
+>
+<meta id="username" data-username='{{user.username}}'>
+{% if agent.type == 'grasshopper' %}
+<meta id='agent' 
+        data-link='{{ url_for("static", filename="grasshopper2.png") }}' 
+        data-i={{ agent.i }}
+        data-j={{ agent.j }}
+>
+{% else %}
+<meta id='agent' 
+        data-link='{{ url_for("static", filename="ant.png") }}' 
+        data-i={{ agent.i }}
+        data-j={{ agent.j }}
+>
+{% endif %}
+
+<div class="grid-x">
+    <div class="cell">
+        <h4 align="center">Welcome {{ user.username }}</h4>
+        <p align="center">
+            Your are in environment {{ environment.id }}
+        </p> 
+        <p align="center">
+            Today is {{ environment.t }} and it is {{ environment.season_desc }}
+        </p> 
+        <p align="center">
+            Your position is : ({{ agent.i }}, {{ agent.j }})
+        </p>
+    </div>
+</div>
+
+<div class="grid-x">
+    <div class="small-2 cell"></div>
+    <div class="small-8 cell">
+        <div class="grid">
+        </div>                 
+    </div>
+    <div class="small-2 cell">
+        <p class="energy">energy {{ agent.energy }}</p>
+        {% for key, value in percepts.items() %}
+            <p class="{{key}}">{{ key|e }} {{ value|e }}</p>
+        {% endfor %}
+    </div>
+</div>
