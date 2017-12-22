@@ -4,7 +4,7 @@
       data-width='{{ environment.width }}' 
       data-id={{ environment.id }}
 >
-<meta id="username" data-username='{{user.username}}'>
+<meta id="username" data-username='{{user.username}}' data-agentid='{{ agent.id }}'>
 {% if agent.type == 'grasshopper' %}
 <meta id='agent' 
         data-link='{{ url_for("static", filename="grasshopper2.png") }}' 
@@ -31,6 +31,7 @@
         <p align="center">
             Your position is : ({{ agent.i }}, {{ agent.j }})
         </p>
+        <p align="center" id="informative"><span vertical-align="middle" class="label secondary"></span></p>
     </div>
 </div>
 

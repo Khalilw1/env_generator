@@ -78,3 +78,7 @@ h4 {
 .energy {
     color: crimson
 }
+
+#informative {
+    display: none;
+}

@@ -130,16 +130,62 @@ class Environment(db.Model):
         if self.t == self.cycle:
             # change season to next one
             self.t = 0
+            if self.season.name == 'spring':
+                self.season = Season.query.filter_by(name='summer').first()
+            elif self.season.name == 'summer':
+                self.season = Season.query.filter_by(name='fall').first()
+            elif self.season.name == 'fall':
+                self.season = Season.query.filter_by(name='winter').first()
+            elif self.season.name == 'winter':
+                self.season = Season.query.filter_by(name='spring').first()
+            self.season_desc = self.season.name
+
+        for i in range(self.height):
+            for j in range(self.width):
+                cell = self.cells[i * self.width + j]
+                if cell.newly == 0 and not cell.seeded:
+                    # if the cell become empty just now seed in once in a randomn cell on the grid.
+                    cell.seeded = True
+                    cap = self.height + self.width
+                    while cap > 0:
+                        seedi = randint(0, self.height - 1)
+                        seedj = randint(0, self.width - 1)
+
+                        production_cap = self.season.production
+
+                        rcell = self.cells[seedi * self.width + seedj]
+                        production_cap -= rcell.newly
+
+                        if production_cap > 0:
+                            seed_amount = randint(1, production_cap)
+                            rcell.newly += seed_amount
+                            rcell.seeded = False
+                            db.session.commit()
+                            break
+
+                        cap = cap - 1
         db.session.commit()
 
     def broadcast(self):
         self.nrequest_daily += 1
         print(len(Agent.query.filter_by(envid=self.id).all()))
 
+        log = {
+            'id': self.id,
+            'remaining': len(Agent.query.filter_by(envid=self.id).all()) - self.nrequest_daily
+        }
         if self.nrequest_daily >= len(Agent.query.filter_by(envid=self.id).all()):
-            socketio.emit('refresh', {'id': self.id})
+            agents = Agent.query.filter_by(envid=self.id).all()
+            dead = []
+            for agent in agents:
+                if agent.energy == 0:
+                    dead.append(agent.id)
+            log['dead'] = dead
+
             self.nrequest_daily = 0
             self.simulate()
+        socketio.emit('refresh', log)
+
 
 class Agent(db.Model):
     __tablename__ = 'agent'
@@ -207,6 +253,19 @@ class Agent(db.Model):
         self.j = self.j + deltaj
 
         self.energy = self.energy - self.move_cost
+
+        environment.broadcast()
+        self.has_played = True
+
+        db.session.commit()
+        return True
+
+    def be(self):
+        if self.has_played:
+            return False
+        environment = Environment.query.filter_by(id=self.envid).first()
+
+        self.energy = max(self.energy - self.be_cost, 0)
 
         environment.broadcast()
         self.has_played = True
@@ -372,6 +431,17 @@ def eat(username):
         db.session.commit()
     return ('', 204)
 
+@app.route('/<username>/be', methods=['POST'])
+def be(username):
+    if request.method == 'POST':
+        print('be request emmited by an ant I hope.')
+
+        user = User.query.filter_by(username=username).first()
+        agent = user.agent
+        agent.be()
+        db.session.commit()
+    return ('', 204)
+
 @app.route('/<username>/refresh', methods=['GET'])
 def refresh(username):
     user = User.query.filter_by(username=username).first()
@@ -388,6 +458,15 @@ def refresh(username):
                            environment=environment,
                            percepts=percepts)
 
+
+@app.route('/<username>/erase')
+def erase(username):
+    user = User.query.filter_by(username=username).first()
+    agent = user.agent
+    db.session.delete(user)
+    db.session.delete(agent)
+    db.session.commit()
+    return render_template('over.html')
 
 if __name__ == '__main__':
     socketio.run(app)

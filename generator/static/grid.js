@@ -3,7 +3,7 @@ $(function() {
         var ratioW = Math.floor($('.grid').width() / width),
             ratioH = Math.floor($('.grid').height() / height);
 
-        var parent = $('div.grid').attr('width', ratioW  * width).attr('height', ratioH  * height);
+        var parent = $('div.grid').css('width', ratioW  * width + 1).css('height', ratioH  * height + 1);
 
         for (var i = 0; i < width * height; i++) {
             $('<div />', {
@@ -68,6 +68,21 @@ $(function() {
         xhr.send();
     }
 
+    function be() {
+        var username = $('#username').data().username;
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", '/'+ username + '/be', true);
+
+        xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+        xhr.onreadystatechange = function() {
+            if(xhr.readyState == XMLHttpRequest.DONE && xhr.status == 200) {
+                console.log(xhr.responseText);
+            }
+        }
+
+        xhr.send();
+    }
+
     $(window).keydown(function(e) {
         // console.log(e);
         var deltai = 0, deltaj = 0;
@@ -98,27 +113,48 @@ $(function() {
             case 70:
             forage();
             break;
+            case 66:
+            be();
+            break;
         }
     })
 
     var socket = io.connect('http://localhost:5000');
     socket.on('refresh', function(message) {
         var id = $('#dimensions').data().id;
+        console.log(message);
         if (message.id == id) {
-            // trigger a refresh.
-            var xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function() { 
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    $('#environment').empty();
-                    $('#environment').html(xhr.responseText);
-                    createGrid(parseInt($('#dimensions').data().height), parseInt($('#dimensions').data().width));
+            if (message.remaining == 0) {
+                agent_id = $('#username').data().agentid;
+                var is_dead = false;
+                for (var i = 0; i < message.dead.length; i++) {
+                    if (message.dead[i] == agent_id) is_dead = true;
                 }
-            }
-            var username = $('#username').data().username;
-            xhr.open("GET", '/' + username + '/refresh', true); // true for asynchronous 
-            xhr.send(null);
+                if (is_dead) {
+                    console.log('dead');
+                    // redirect to game over screen.
+                    window.location.replace("/" + $('#username').data().username + '/erase');
+                    return ;
+                }
+                // trigger a refresh.
+                var xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function() { 
+                    if (xhr.readyState == 4 && xhr.status == 200) {
+                        $('#environment').empty();
+                        $('#environment').html(xhr.responseText);
+                        createGrid(parseInt($('#dimensions').data().height), parseInt($('#dimensions').data().width));
+                    }
+                }
+                var username = $('#username').data().username;
+                xhr.open("GET", '/' + username + '/refresh', true); // true for asynchronous 
+                xhr.send(null);
 
-            console.log('refresh has been signaled.');
+                console.log('refresh has been signaled.');
+                $('#informative').hide();
+            } else {
+                $('#informative > span').text('Waiting for ' + message.remaining + ' players.');
+                $('#informative').show();
+            }
         } else console.log('refresh was broadcasted.');
     });
 })
