@@ -25,6 +25,12 @@ Then we proceed to running into running the app.
 > open http://127.0.0.1:5000
 ```
 
-## Demo
 
+## Status
+The demo shows how one could use single player mode inside an environment and multiplayer one. Every player needs to wait for all other to do a move and a when a players energy touches 0 they die in agony or no. The player can do all the basic actions describe this is mainly a proof of concept of what can be achieved with this kind of specification. The friendship feature is not yet added and is left as future work. I would be glad to introduce this to our next AI class.
+
+### Demo
 ![demo](/assets/demo.gif?raw=true)
+
+### Control
+The agents use the arrows to move and in order to use the agents moves (eat, be, forage), the agents use the first character as the move representative. This means in order to eat one has to press e.
