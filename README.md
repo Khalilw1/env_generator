@@ -24,3 +24,7 @@ Then we proceed to running into running the app.
 > flask run
 > open http://127.0.0.1:5000
 ```
+
+## Demo
+
+![demo](/assets/demo.gif?raw=true)
